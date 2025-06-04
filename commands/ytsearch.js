@@ -1,17 +1,16 @@
 import axios from "axios";
 
-// ✅ YouTube API endpoints
 const SEARCH_URL = "https://kaiz-apis.gleeze.com/api/ytsearch";
 const DOWNLOAD_URL = "https://kaiz-apis.gleeze.com/api/ytdown-mp3";
 const API_KEY = "95c78af8-050f-4d0e-92c1-ddc78b5a4e19";
 
-// Track cache to store search results per user
+// Cache search results per user
 const trackCache = new Map();
 
 export default {
   name: "ytsearch",
   aliases: ["ytmp3"],
-  author: "GPT Fixed",
+  author: "ChatGPT",
   description: "Search and download YouTube videos as MP3 using Kaiz API.",
   usage: ["ytsearch <video title>"],
   cooldown: 5,
@@ -23,30 +22,34 @@ export default {
     const userId = message.from.id;
 
     if (!args.length) {
-      return bot.sendMessage(chatId, "❌ Please provide a video title to search.");
+      return bot.sendMessage(chatId, "❌ Please provide a video title.");
     }
 
     const query = args.join(" ");
-    await bot.sendMessage(chatId, `🔍 Searching YouTube for *${query}*...`, { parse_mode: 'Markdown' });
+    await bot.sendMessage(chatId, `🔍 Searching YouTube for *${query}*...`, {
+      parse_mode: "Markdown"
+    });
 
     try {
-      const { data } = await axios.get(SEARCH_URL, {
+      const res = await axios.get(SEARCH_URL, {
         params: { q: query, apikey: API_KEY }
       });
 
-      if (!Array.isArray(data) || data.length === 0) {
+      const results = res.data;
+      if (!Array.isArray(results) || results.length === 0) {
         return bot.sendMessage(chatId, "❌ No results found.");
       }
 
-      const results = data.slice(0, 5);
-      trackCache.set(userId, results);
+      // Save top 5 results for callback selection
+      const topResults = results.slice(0, 5);
+      trackCache.set(userId, topResults);
 
-      const keyboard = results.map((video, i) => [{
-        text: `${video.title} (${video.duration || "?"})`,
-        callback_data: `yt_${i}`
+      const keyboard = topResults.map((vid, i) => [{
+        text: `${vid.title} (${vid.duration || "?"})`,
+        callback_data: `ytmp3_${i}`
       }]);
 
-      await bot.sendMessage(chatId, "📺 Select a video to download as MP3:", {
+      await bot.sendMessage(chatId, "🎵 Choose a video to download:", {
         reply_markup: { inline_keyboard: keyboard }
       });
 
@@ -61,19 +64,20 @@ export default {
     const chatId = message.chat.id;
     const userId = from.id;
 
-    if (!data.startsWith("yt_")) return;
+    if (!data.startsWith("ytmp3_")) return;
 
     const index = parseInt(data.split("_")[1]);
-    const cachedTracks = trackCache.get(userId);
+    const cachedVideos = trackCache.get(userId);
 
-    if (!cachedTracks || !cachedTracks[index]) {
+    if (!cachedVideos || !cachedVideos[index]) {
       return bot.answerCallbackQuery(callbackQuery.id, {
         text: "❌ Video not found or expired.",
         show_alert: true
       });
     }
 
-    const video = cachedTracks[index];
+    const video = cachedVideos[index];
+    const videoUrl = video.videoUrl || video.url;
 
     await bot.answerCallbackQuery(callbackQuery.id);
     await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
@@ -81,31 +85,30 @@ export default {
       message_id: message.message_id
     });
 
-    try {
-      if (!video.videoUrl || !video.videoUrl.startsWith("http")) {
-        return bot.sendMessage(chatId, "❌ Invalid video URL. Try again.");
-      }
+    if (!videoUrl || !videoUrl.startsWith("http")) {
+      return bot.sendMessage(chatId, "❌ Invalid video URL. Try again.");
+    }
 
-      const { data } = await axios.get(DOWNLOAD_URL, {
-        params: { url: video.videoUrl, apikey: API_KEY }
+    try {
+      const res = await axios.get(DOWNLOAD_URL, {
+        params: { url: videoUrl, apikey: API_KEY }
       });
 
-      const { title, url, channel, thumbnail } = data || {};
-
+      const { title, url, channel, thumbnail } = res.data || {};
       if (!url || !title) {
         return bot.sendMessage(chatId, "⚠️ Failed to download MP3.");
       }
 
       const caption =
-        "🎧 *YouTube Video Downloaded as MP3*\n\n" +
+        `🎧 *YouTube MP3*\n\n` +
         `🎵 *Title:* ${title}\n` +
         `📺 *Channel:* ${channel || "Unknown"}\n\n` +
-        "📥 Downloading audio...";
+        `📥 Downloading...`;
 
       if (thumbnail) {
-        await bot.sendPhoto(chatId, thumbnail, { caption, parse_mode: 'Markdown' });
+        await bot.sendPhoto(chatId, thumbnail, { caption, parse_mode: "Markdown" });
       } else {
-        await bot.sendMessage(chatId, caption, { parse_mode: 'Markdown' });
+        await bot.sendMessage(chatId, caption, { parse_mode: "Markdown" });
       }
 
       await bot.sendAudio(chatId, url, {
@@ -114,8 +117,8 @@ export default {
       });
 
     } catch (err) {
-      log?.error?.("❌ Download Error:", err.response?.data || err.message);
-      await bot.sendMessage(chatId, "❌ Error downloading the video.");
+      log?.error?.("❌ MP3 Download Error:", err.response?.data || err.message);
+      return bot.sendMessage(chatId, "❌ Error downloading the video.");
     }
   }
 };
