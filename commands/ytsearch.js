@@ -2,7 +2,7 @@ import axios from "axios";
 
 const SEARCH_URL = "https://kaiz-apis.gleeze.com/api/ytsearch";
 const DOWNLOAD_URL = "https://kaiz-apis.gleeze.com/api/ytdown-mp3";
-const API_KEY = "95c78af8-050f-4d0e-92c1-ddc78b5a4e19";
+const API_KEY = "0c919818-e23a-4174-bc8a-18130389a7ba";
 
 // Cache search results per user
 const trackCache = new Map();
