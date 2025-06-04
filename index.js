@@ -1,25 +1,18 @@
 import TelegramBot from 'node-telegram-bot-api';
 import fs from 'fs-extra';
-import path from 'path';
+import path, { dirname as getDirname } from 'path';
 import chalk from 'chalk';
 import figlet from 'figlet';
 import express from 'express';
 import { fileURLToPath } from 'url';
-import { dirname as getDirname } from 'path';
-import config from './config.json' assert { type: 'json' };
+import config from './config.js';
 
-
-// Fix __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = getDirname(__filename);
 
 // Banner
 console.log(
-  chalk.green(
-    figlet.textSync(config.botFileName || 'TelegramBot', {
-      font: 'Standard',
-    })
-  )
+  chalk.green(figlet.textSync(config.botFileName || 'TelegramBot', { font: 'Standard' }))
 );
 console.log(chalk.cyan(`🤖 Bot Name: ${config.botName}`));
 console.log(chalk.cyan(`👑 Owner: ${config.ownerName}`));
@@ -37,17 +30,15 @@ const commandFiles = await fs.readdir(commandsPath);
 for (const file of commandFiles) {
   if (file.endsWith('.js')) {
     try {
-      const { default: command } = await import(path.join(commandsPath, file));
-
-      if (!command || typeof command.name !== 'string' || typeof command.execute !== 'function') {
-        console.warn(chalk.red(`❌ Invalid command file: ${file}`));
+      const { default: command } = await import(`./commands/${file}`);
+      if (!command.name || typeof command.execute !== 'function') {
+        console.warn(chalk.red(`❌ Invalid command: ${file}`));
         continue;
       }
-
       commands.set(command.name, command);
       console.log(chalk.green(`✅ Loaded command: ${command.name}`));
-    } catch (e) {
-      console.error(chalk.red(`❌ Error loading command ${file}:`), e);
+    } catch (err) {
+      console.error(chalk.red(`❌ Failed to load ${file}:`), err);
     }
   }
 }
@@ -56,53 +47,29 @@ for (const file of commandFiles) {
 const eventsPath = path.join(__dirname, 'events');
 if (await fs.pathExists(eventsPath)) {
   const eventFiles = await fs.readdir(eventsPath);
-
   for (const file of eventFiles) {
     if (file.endsWith('.js')) {
       try {
-        const { default: event } = await import(path.join(eventsPath, file));
-
+        const { default: event } = await import(`./events/${file}`);
         if (typeof event === 'function') {
           event({ bot, config, commands });
           console.log(chalk.green(`✅ Loaded event: ${file}`));
         } else {
-          console.warn(chalk.red(`❌ Invalid event file (must export function): ${file}`));
+          console.warn(chalk.red(`❌ Event must export a function: ${file}`));
         }
-      } catch (e) {
-        console.error(chalk.red(`❌ Error loading event ${file}:`), e);
+      } catch (err) {
+        console.error(chalk.red(`❌ Failed to load event ${file}:`), err);
       }
     }
   }
 }
 
+// Express Web UI
+const app = express();
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.listen(3000, () => console.log(chalk.green(`🌐 Web UI running at http://localhost:3000`)));
 
-// Express Web UI (serving index.html)
-const app = express(); // <--- MAKE SURE THIS IS INCLUDED
-
-// If you want to serve CSS/JS/images from a 'public' folder:
-// app.use(express.static(path.join(__dirname, 'public')));
-
-// Serve index.html from root
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.listen(3000, () => {
-  console.log(chalk.green(`🌐 Web UI running at http://localhost:3000`));
-});
-
-
-app.listen(3000, () => {
-  console.log(chalk.green(`🌐 Web UI running at http://localhost:3000`));
-});
-
-
-app.listen(3000, () => {
-  console.log(chalk.green(`🌐 Web UI running at http://localhost:3000`));
-});
-
-
-// Handle incoming messages
+// Message handling
 bot.on('message', async (msg) => {
   if (!msg.text) return;
 
@@ -112,24 +79,19 @@ bot.on('message', async (msg) => {
     ? `@${msg.from.username}`
     : `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
 
-  // Log message
   console.log(chalk.blue(`[MESSAGE] From ${userName} (${userId}) in ${msg.chat.type}: ${msg.text}`));
 
-  const prefix = config.prefix || '!';
   const text = msg.text.trim();
+  if (!text.startsWith(config.prefix)) return;
 
-  const isCommand = text.startsWith(prefix);
-  if (!isCommand) return;
-
-  const args = text.slice(prefix.length).trim().split(/\s+/);
+  const args = text.slice(config.prefix.length).trim().split(/\s+/);
   const cmdName = args.shift().toLowerCase();
 
-  if (!commands.has(cmdName)) {
+  const command = commands.get(cmdName);
+  if (!command) {
     console.log(chalk.yellow(`⚠️ Unknown command: ${cmdName}`));
     return;
   }
-
-  const command = commands.get(cmdName);
 
   try {
     await command.execute(bot, msg, args, config, commands);
@@ -139,7 +101,7 @@ bot.on('message', async (msg) => {
   }
 });
 
-// Handle callback queries (inline buttons)
+// Handle inline buttons
 bot.on('callback_query', async (cb) => {
   for (const command of commands.values()) {
     if (typeof command.onCallbackQuery === 'function') {
