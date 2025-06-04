@@ -6,7 +6,8 @@ import figlet from 'figlet';
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname as getDirname } from 'path';
-import config from './config.json' assert { type: "json" };
+import config from './config.json' assert { type: 'json' };
+
 
 // Fix __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
