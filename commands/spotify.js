@@ -1,17 +1,17 @@
 import axios from "axios";
 
-// Constants
+// ✅ Correct endpoints
 const SEARCH_URL = "https://kaiz-apis.gleeze.com/api/spotify-search";
-const DOWNLOAD_URL = "https://kaiz-apis.gleeze.com/api/spankbang-dl";
+const DOWNLOAD_URL = "https://kaiz-apis.gleeze.com/api/spotify-dl";
 const API_KEY = "95c78af8-050f-4d0e-92c1-ddc78b5a4e19";
 
-// Cache search results per user
+// In-memory track cache per user
 const trackCache = new Map();
 
 export default {
   name: "spotify",
   aliases: [],
-  author: "GPT Fix",
+  author: "GPT Fixed",
   description: "Search and download a Spotify track using Kaiz API.",
   usage: ["spotify <song name>"],
   cooldown: 5,
@@ -34,14 +34,12 @@ export default {
         params: { q: query, apikey: API_KEY }
       });
 
-      console.log("🔍 Full search results:", data);
-
       if (!Array.isArray(data) || data.length === 0) {
         return bot.sendMessage(chatId, "❌ No results found.");
       }
 
       const results = data.slice(0, 5);
-      trackCache.set(userId, results);
+      trackCache.set(userId, results); // Cache results by user
 
       const keyboard = results.map((track, i) => [{
         text: `${track.title} (${track.duration || "?"})`,
@@ -54,7 +52,7 @@ export default {
 
     } catch (err) {
       log?.error?.("❌ Spotify Search Error:", err.response?.data || err.message);
-      return bot.sendMessage(chatId, "❌ Search Error: " + (err.response?.data?.error?.message || err.message));
+      return bot.sendMessage(chatId, "❌ Error: " + (err.response?.data?.error?.message || err.message));
     }
   },
 
@@ -77,16 +75,6 @@ export default {
 
     const track = cachedTracks[index];
 
-    // Log for debugging
-    console.log("🎧 Selected track:", track);
-
-    // Determine actual track URL field (adjust if API changes)
-    const trackUrl = track.url || track.trackUrl || track.link || "";
-
-    if (!trackUrl || !trackUrl.startsWith("http")) {
-      return bot.sendMessage(chatId, "❌ Invalid track URL.");
-    }
-
     await bot.answerCallbackQuery(callbackQuery.id);
     await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
       chat_id: chatId,
@@ -94,25 +82,30 @@ export default {
     });
 
     try {
+      if (!track.trackUrl || !track.trackUrl.startsWith("http")) {
+        return bot.sendMessage(chatId, "❌ Invalid track URL. Try again.");
+      }
+
       const { data } = await axios.get(DOWNLOAD_URL, {
-        params: { url: trackUrl, apikey: API_KEY }
+        params: { url: track.trackUrl, apikey: API_KEY }
       });
 
       const { title, url, artist, thumbnail } = data || {};
+
       if (!url || !title) {
         return bot.sendMessage(chatId, "⚠️ Failed to download track.");
       }
 
       const caption =
-        "🎧 *𝗦𝗽𝗼𝘁𝗶𝗳𝘆 𝗧𝗿𝗮𝗰𝗸 𝗙𝗲𝘁𝗰𝗵𝗲𝗱*\n\n" +
+        "🎧 *Spotify Track Downloaded*\n\n" +
         `🎵 *Title:* ${title}\n` +
         `👤 *Artist:* ${artist || "Unknown"}\n\n` +
         "📥 Downloading audio...";
 
       if (thumbnail) {
-        await bot.sendPhoto(chatId, thumbnail, { caption, parse_mode: "Markdown" });
+        await bot.sendPhoto(chatId, thumbnail, { caption, parse_mode: 'Markdown' });
       } else {
-        await bot.sendMessage(chatId, caption, { parse_mode: "Markdown" });
+        await bot.sendMessage(chatId, caption, { parse_mode: 'Markdown' });
       }
 
       await bot.sendAudio(chatId, url, {
