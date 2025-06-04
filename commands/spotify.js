@@ -1,8 +1,8 @@
 import axios from "axios";
 
 // ✅ Correct endpoints
-const SEARCH_URL = "https://kaiz-apis.gleeze.com/api/spotify-search";
-const DOWNLOAD_URL = "https://kaiz-apis.gleeze.com/api/spotify-dl";
+const SEARCH_URL = "https://kaiz-apis.gleeze.com/api/ytsearch?";
+const DOWNLOAD_URL = "https://kaiz-apis.gleeze.com/api/ytdown-mp3?";
 const API_KEY = "95c78af8-050f-4d0e-92c1-ddc78b5a4e19";
 
 // In-memory track cache per user
